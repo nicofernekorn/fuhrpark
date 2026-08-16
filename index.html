@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fuhrpark">
+<meta name="theme-color" content="#14161a">
+<title>Fuhrpark</title>
+<link rel="manifest" href='data:application/manifest+json,{"name":"Fuhrpark","short_name":"Fuhrpark","display":"standalone","background_color":"%2314161a","theme_color":"%2314161a","start_url":"./"}'>
+<style>
+:root{
+  --ink:#14161a; --ink-2:#252a31; --paper:#f4f5f6; --surface:#ffffff;
+  --line:#d9dde1; --track:#e6e9ec; --muted:#6f7780;
+  --alarm:#c0322c; --warn:#b26a11; --ok:#3e7d4f;
+  --r:10px;
+  --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--sans);background:var(--paper);color:var(--ink);
+  font-size:16px;line-height:1.45;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:640px;margin:0 auto;padding:0 16px 120px}
+header{padding:28px 0 18px}
+h1{font-size:15px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;margin:0 0 6px}
+.summary{font-size:14px;color:var(--muted);margin:0}
+.summary b{color:var(--alarm);font-weight:700}
+
+.list{display:flex;flex-direction:column;gap:10px}
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:14px;display:flex;gap:14px;align-items:center;cursor:pointer;
+  transition:border-color .15s ease, transform .1s ease;
+}
+.card:active{transform:scale(.994)}
+.card:hover{border-color:#b9c0c7}
+.card:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.card.overdue{border-color:#e8b6b3;background:#fffafa}
+.card-main{flex:1;min-width:0}
+.plate{display:inline-flex;align-items:stretch;height:30px;border:1.5px solid var(--ink);border-radius:4px;overflow:hidden;background:#fff}
+.plate .eu{background:#003399;color:#fff;width:17px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:2px 0 3px}
+.plate .stars{font-size:6px;line-height:1;letter-spacing:-.5px;opacity:.95}
+.plate .d{font-size:9px;font-weight:700;line-height:1}
+.plate .num{display:flex;align-items:center;padding:0 8px;font-weight:800;font-size:16px;letter-spacing:.04em;white-space:nowrap}
+.meta{margin-top:7px;font-size:13px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.meta .due-txt{font-weight:600;color:var(--ink-2)}
+.meta .due-txt.overdue{color:var(--alarm)}
+.meta .due-txt.soon{color:var(--warn)}
+.sep{opacity:.4}
+
+/* Fortschrittsring: wie viel des Prüfintervalls abgelaufen ist */
+.gauge{position:relative;width:48px;height:48px;flex:0 0 48px}
+.gauge svg{display:block;transform:rotate(-90deg)}
+.gauge .track{fill:none;stroke:var(--track);stroke-width:4}
+.gauge .arc{fill:none;stroke:var(--ink-2);stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset .3s ease}
+.gauge.soon .arc{stroke:var(--warn)}
+.gauge.overdue .arc{stroke:var(--alarm)}
+.gauge .lbl{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;line-height:1;
+}
+.gauge .mm{font-size:13px;font-weight:800;letter-spacing:-.02em}
+.gauge .yy{font-size:9.5px;font-weight:600;color:var(--muted);margin-top:2px}
+.gauge.overdue .mm,.gauge.overdue .yy{color:var(--alarm)}
+
+.empty{border:1.5px dashed var(--line);border-radius:var(--r);padding:34px 20px;text-align:center;color:var(--muted);background:#fbfbfc}
+.empty p{margin:0 0 4px;font-weight:600;color:var(--ink-2)}
+.empty span{font-size:14px}
+
+.section-label{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:26px 0 8px}
+.tools{display:flex;flex-direction:column;gap:8px}
+.tool{
+  width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);padding:13px 14px;font:inherit;font-size:14px;color:var(--ink-2);
+  cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;
+}
+.tool:hover{border-color:#b9c0c7}
+.tool small{color:var(--muted);font-size:12.5px;display:block;font-weight:400;margin-top:2px}
+.tool b{font-weight:600}
+.tool .chev{color:var(--muted);flex:0 0 auto}
+
+.fab{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom));
+  background:var(--ink);color:#fff;border:none;border-radius:999px;padding:14px 26px;
+  font:inherit;font-weight:600;font-size:15px;cursor:pointer;
+  box-shadow:0 6px 22px rgba(20,22,26,.28);z-index:40;
+}
+.fab:active{transform:translateX(-50%) scale(.97)}
+
+.backdrop{position:fixed;inset:0;background:rgba(20,22,26,.45);z-index:50;display:none;align-items:flex-end;justify-content:center}
+.backdrop.open{display:flex}
+.sheet{
+  background:var(--paper);width:100%;max-width:640px;border-radius:16px 16px 0 0;
+  padding:20px 16px calc(20px + env(safe-area-inset-bottom));max-height:92vh;overflow-y:auto;
+  animation:rise .2s ease-out;
+}
+@keyframes rise{from{transform:translateY(24px)}to{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}*{transition:none!important}}
+.sheet h2{font-size:14px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;margin:0 0 18px}
+label{display:block;font-size:13px;font-weight:600;color:var(--ink-2);margin:0 0 6px}
+.field{margin-bottom:16px}
+input,select{
+  width:100%;font:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--line);
+  border-radius:8px;background:var(--surface);color:var(--ink);appearance:none;
+}
+input:focus,select:focus{outline:2px solid var(--ink);outline-offset:-1px;border-color:var(--ink)}
+#f-plate{font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;font:inherit;font-size:14px;padding:10px 4px;background:var(--surface);border:1px solid var(--line);border-radius:8px;cursor:pointer;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600}
+.row2{display:flex;gap:10px}
+.row2>*{flex:1}
+.inline-months{display:flex;gap:8px;align-items:center;margin-top:8px}
+.inline-months input{flex:0 0 110px}
+.inline-months span{font-size:14px;color:var(--muted)}
+.actions{display:flex;gap:10px;margin-top:22px}
+.btn{flex:1;font:inherit;font-size:15px;font-weight:600;padding:13px;border-radius:9px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink-2)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.danger{background:transparent;border-color:#e0b4b1;color:var(--alarm);flex:0 0 auto;padding:13px 16px}
+.btn:active{opacity:.85}
+.done-btn{width:100%;margin-top:4px;font:inherit;font-size:14px;font-weight:600;padding:12px;border-radius:9px;border:1px dashed #a8c0ae;background:#f2f8f3;color:var(--ok);cursor:pointer}
+
+.toast{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));
+  background:var(--ink-2);color:#fff;padding:11px 18px;border-radius:999px;font-size:14px;z-index:60;
+  opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px);text-align:center;
+}
+.toast.show{opacity:1}
+.warnbar{background:#fff6e8;border:1px solid #e8d3ab;color:#7a5410;border-radius:var(--r);padding:11px 13px;font-size:13px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fuhrpark</h1>
+    <p class="summary" id="summary">Wird geladen …</p>
+  </header>
+
+  <div id="storage-warn" class="warnbar" style="display:none">
+    Dieser Browser speichert nichts dauerhaft. Deine Eingaben gehen beim Schließen verloren — leg die Seite auf den Homescreen, dann bleiben sie erhalten.
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <p class="section-label">Kalender</p>
+  <div class="tools">
+    <button class="tool" id="btn-ics">
+      <span><b>Termine in den Kalender legen</b><small>Wiederholt sich von allein — erinnert 60 und 14 Tage vorher sowie am Stichtag</small></span>
+      <span class="chev">→</span>
+    </button>
+  </div>
+
+  <p class="section-label">Daten</p>
+  <div class="tools">
+    <button class="tool" id="btn-backup">
+      <span><b>Sicherung speichern</b><small>Alle Fahrzeuge als Datei — die Daten liegen nur auf diesem Gerät</small></span>
+      <span class="chev">→</span>
+    </button>
+    <button class="tool" id="btn-restore">
+      <span><b>Sicherung einlesen</b><small>Ersetzt den aktuellen Bestand</small></span>
+      <span class="chev">→</span>
+    </button>
+  </div>
+</div>
+
+<button class="fab" id="fab">Fahrzeug aufnehmen</button>
+<input type="file" id="file-in" accept="application/json,.json" style="display:none">
+<div class="toast" id="toast"></div>
+
+<div class="backdrop" id="backdrop">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <h2 id="sheet-title">Fahrzeug aufnehmen</h2>
+
+    <div class="field">
+      <label for="f-plate">Kennzeichen</label>
+      <input id="f-plate" type="text" placeholder="MHL-AB 123" autocapitalize="characters" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label>Fahrzeugart</label>
+      <div class="seg" id="f-type">
+        <button type="button" data-type="PKW" data-months="24">PKW</button>
+        <button type="button" data-type="LKW" data-months="12">LKW</button>
+        <button type="button" data-type="Anhänger" data-months="24">Anhänger</button>
+        <button type="button" data-type="Krad" data-months="24">Krad</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="f-last">Letzte HU</label>
+      <input id="f-last" type="month">
+    </div>
+
+    <div class="field">
+      <label for="f-int">Nächste HU fällig nach</label>
+      <select id="f-int">
+        <option value="12">12 Monaten</option>
+        <option value="24" selected>24 Monaten</option>
+        <option value="36">36 Monaten</option>
+        <option value="custom">Eigenes Intervall …</option>
+      </select>
+      <div class="inline-months" id="wrap-int-custom" style="display:none">
+        <input id="f-int-custom" type="number" min="1" max="120" step="1" inputmode="numeric" placeholder="6">
+        <span>Monate</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="f-next">Folgerhythmus</label>
+      <select id="f-next">
+        <option value="same" selected>wie oben</option>
+        <option value="12">alle 12 Monate</option>
+        <option value="24">alle 24 Monate</option>
+        <option value="36">alle 36 Monate</option>
+        <option value="custom">Eigenes Intervall …</option>
+      </select>
+      <div class="inline-months" id="wrap-next-custom" style="display:none">
+        <input id="f-next-custom" type="number" min="1" max="120" step="1" inputmode="numeric" placeholder="24">
+        <span>Monate</span>
+      </div>
+      <p class="hint">Nur nötig, wenn die erste Frist abweicht — beim Neufahrzeug etwa 36 Monate, danach alle 24.</p>
+    </div>
+
+    <p class="hint" id="preview-hint"></p>
+    <button class="done-btn" id="btn-done" style="display:none">HU wurde diesen Monat gemacht — Datum weiterstellen</button>
+
+    <div class="actions">
+      <button class="btn danger" id="btn-del" style="display:none">Löschen</button>
+      <button class="btn" id="btn-cancel">Abbrechen</button>
+      <button class="btn primary" id="btn-save">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============ Ablage ============ */
+var KEY = "fuhrpark.v1";
+var canPersist = true;
+
+function loadAll(){
+  try{
+    var raw = localStorage.getItem(KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ canPersist = false; return []; }
+}
+var vehicles = loadAll();
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(vehicles)); }
+  catch(e){ canPersist = false; document.getElementById("storage-warn").style.display = "block"; }
+}
+if(!canPersist) document.getElementById("storage-warn").style.display = "block";
+
+/* ============ Termine ============ */
+var MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+function pad(n){ return String(n).padStart(2,"0"); }
+
+function lastDate(v){
+  var p = v.last.split("-");
+  return new Date(parseInt(p[0],10), parseInt(p[1],10)-1, 1);
+}
+function dueOf(v){
+  var p = v.last.split("-");
+  var total = parseInt(p[0],10)*12 + (parseInt(p[1],10)-1) + v.months;
+  return { y: Math.floor(total/12), m: total%12 };
+}
+function dueDate(v){ var d = dueOf(v); return new Date(d.y, d.m, 1); }
+function daysUntil(v){
+  var t = new Date(); t.setHours(0,0,0,0);
+  return Math.round((dueDate(v) - t) / 86400000);
+}
+function statusOf(v){
+  var d = daysUntil(v);
+  return d < 0 ? "overdue" : (d <= 60 ? "soon" : "ok");
+}
+// Anteil des Prüfintervalls, der bereits verstrichen ist (0 … 1)
+function elapsedFraction(v){
+  var a = lastDate(v), b = dueDate(v);
+  var t = new Date(); t.setHours(0,0,0,0);
+  if(b <= a) return 1;
+  return Math.max(0, Math.min(1, (t - a) / (b - a)));
+}
+function dueLabel(v){
+  var d = dueOf(v), days = daysUntil(v), base = MONTHS[d.m] + " " + d.y;
+  if(days < 0){
+    var o = Math.abs(days);
+    return base + " · seit " + (o > 60 ? Math.round(o/30) + " Monaten" : o + " Tagen") + " fällig";
+  }
+  if(days <= 60) return base + " · in " + days + " Tagen";
+  return base;
+}
+function cycleOf(v){ return v.next || v.months; }
+
+/* ============ Darstellung ============ */
+function esc(s){
+  return String(s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function plateHTML(t){
+  return '<span class="plate"><span class="eu"><span class="stars">★★<br>★&nbsp;★<br>★★</span>'
+       + '<span class="d">D</span></span><span class="num">' + esc(t) + '</span></span>';
+}
+
+var R = 20, C = 2 * Math.PI * R;   // Ringradius und Umfang
+
+function gaugeHTML(v){
+  var st = statusOf(v), d = dueOf(v);
+  var frac = elapsedFraction(v);
+  var offset = C * (1 - frac);
+  return '<div class="gauge ' + st + '" aria-hidden="true">'
+       + '<svg width="48" height="48" viewBox="0 0 48 48">'
+       + '<circle class="track" cx="24" cy="24" r="' + R + '"></circle>'
+       + '<circle class="arc" cx="24" cy="24" r="' + R + '"'
+       + ' stroke-dasharray="' + C.toFixed(2) + '"'
+       + ' stroke-dashoffset="' + offset.toFixed(2) + '"></circle>'
+       + '</svg>'
+       + '<span class="lbl"><span class="mm">' + pad(d.m+1) + '</span>'
+       + '<span class="yy">' + d.y + '</span></span></div>';
+}
+
+function render(){
+  var listEl = document.getElementById("list");
+  var sorted = vehicles.slice().sort(function(a,b){ return dueDate(a) - dueDate(b); });
+
+  listEl.innerHTML = sorted.length
+    ? sorted.map(function(v){
+        var st = statusOf(v);
+        return '<div class="card' + (st === "overdue" ? " overdue" : "") + '" data-id="' + v.id + '" tabindex="0" role="button">'
+             + gaugeHTML(v) + '<div class="card-main">' + plateHTML(v.plate)
+             + '<div class="meta"><span class="due-txt ' + st + '">' + esc(dueLabel(v)) + '</span>'
+             + '<span class="sep">·</span><span>' + esc(v.type) + '</span>'
+             + '<span class="sep">·</span><span>alle ' + cycleOf(v) + ' Mon.</span></div></div></div>';
+      }).join("")
+    : '<div class="empty"><p>Noch kein Fahrzeug erfasst.</p><span>Nimm das erste auf, dann siehst du hier, was als Nächstes zur HU muss.</span></div>';
+
+  var over = vehicles.filter(function(v){ return statusOf(v) === "overdue"; }).length;
+  var soon = vehicles.filter(function(v){ return statusOf(v) === "soon"; }).length;
+  var txt;
+  if(!vehicles.length) txt = "Keine Fahrzeuge im Bestand.";
+  else if(over) txt = "<b>" + over + " " + (over===1?"Fahrzeug ist":"Fahrzeuge sind") + " überfällig</b>"
+                    + (soon ? ", " + soon + " in den nächsten zwei Monaten dran" : "");
+  else if(soon) txt = soon + " " + (soon===1?"Fahrzeug":"Fahrzeuge") + " in den nächsten zwei Monaten dran";
+  else txt = vehicles.length + " " + (vehicles.length===1?"Fahrzeug":"Fahrzeuge") + ", alle im grünen Bereich";
+  document.getElementById("summary").innerHTML = txt;
+}
+
+function toast(msg){
+  var t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h);
+  t._h = setTimeout(function(){ t.classList.remove("show"); }, 3600);
+}
+
+/* ============ Kalenderdatei ============ */
+function icsEsc(s){ return String(s).replace(/([,;\\])/g,"\\$1").replace(/\n/g,"\\n"); }
+
+// Zeilen auf 75 Oktett falten, wie der iCalendar-Standard es verlangt
+function fold(line){
+  var enc = new TextEncoder();
+  if(enc.encode(line).length <= 75) return line;
+  var parts = [], cur = "", used = 0;
+  for(var i = 0; i < line.length; i++){
+    var ch = line[i], w = enc.encode(ch).length;
+    if(used + w > 75){ parts.push(cur); cur = ch; used = w + 1; }
+    else { cur += ch; used += w; }
+  }
+  parts.push(cur);
+  return parts.join("\r\n ");
+}
+
+function buildICS(){
+  var stamp = new Date().toISOString().replace(/[-:]/g,"").split(".")[0] + "Z";
+  var L = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Fuhrpark//HU//DE","CALSCALE:GREGORIAN",
+           "METHOD:PUBLISH","X-WR-CALNAME:HU-Termine"];
+
+  function vevent(uid, y, m, v, rruleMonths, seq){
+    var e = new Date(y, m, 2);
+    var title = "HU fällig: " + v.plate;
+    L.push("BEGIN:VEVENT");
+    L.push("UID:" + uid + "@fuhrpark.local");
+    L.push("DTSTAMP:" + stamp);
+    L.push("SEQUENCE:" + (seq || 0));
+    L.push("DTSTART;VALUE=DATE:" + y + pad(m+1) + "01");
+    L.push("DTEND;VALUE=DATE:" + e.getFullYear() + pad(e.getMonth()+1) + pad(e.getDate()));
+    if(rruleMonths) L.push("RRULE:FREQ=MONTHLY;INTERVAL=" + rruleMonths);
+    L.push(fold("SUMMARY:" + icsEsc(title)));
+    L.push(fold("DESCRIPTION:" + icsEsc(
+      v.type + " " + v.plate + ". Prüfrhythmus: alle " + (rruleMonths || v.months) + " Monate. "
+      + "Nach der HU das Datum in der Fuhrpark-App weiterstellen."
+    )));
+    L.push("TRANSP:TRANSPARENT");
+    [["-P60D","60 Tage vorher"],["-P14D","14 Tage vorher"],["-PT9H","heute"]].forEach(function(a){
+      L.push("BEGIN:VALARM","ACTION:DISPLAY","TRIGGER;RELATED=START:" + a[0]);
+      L.push(fold("DESCRIPTION:" + icsEsc(title + " (" + a[1] + ")")));
+      L.push("END:VALARM");
+    });
+    L.push("END:VEVENT");
+  }
+
+  vehicles.forEach(function(v){
+    var d = dueOf(v), cyc = cycleOf(v), seq = v.seq || 0;
+    if(cyc === v.months){
+      vevent(v.id, d.y, d.m, v, cyc, seq);
+    } else {
+      // Abweichende erste Frist: einzelner Termin, danach die Reihe im Folgerhythmus
+      vevent(v.id + "-a", d.y, d.m, v, null, seq);
+      var t2 = d.y*12 + d.m + cyc;
+      vevent(v.id + "-b", Math.floor(t2/12), t2%12, v, cyc, seq);
+    }
+  });
+
+  L.push("END:VCALENDAR");
+  return L.join("\r\n") + "\r\n";
+}
+
+function deliver(blob, filename, msg){
+  var file = null;
+  try{ file = new File([blob], filename, { type: blob.type }); }catch(e){}
+  if(file && navigator.canShare && navigator.canShare({ files:[file] })){
+    navigator.share({ files:[file] }).then(function(){ toast(msg); }).catch(function(){});
+    return;
+  }
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = filename; a.rel = "noopener";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  toast(msg);
+}
+
+document.getElementById("btn-ics").addEventListener("click", function(){
+  if(!vehicles.length){ toast("Erst ein Fahrzeug aufnehmen."); return; }
+  deliver(new Blob([buildICS()], { type:"text/calendar" }), "hu-termine.ics",
+          "Datei öffnen und \u201eAlle hinzufügen\u201c wählen.");
+});
+
+/* ============ Formular ============ */
+var editing = null;
+var backdrop = document.getElementById("backdrop");
+var elPlate  = document.getElementById("f-plate");
+var elLast   = document.getElementById("f-last");
+var elInt    = document.getElementById("f-int");
+var elIntC   = document.getElementById("f-int-custom");
+var elNext   = document.getElementById("f-next");
+var elNextC  = document.getElementById("f-next-custom");
+var typeBtns = Array.prototype.slice.call(document.querySelectorAll("#f-type button"));
+var PRESETS  = ["12","24","36"];
+
+function thisMonth(){
+  var d = new Date();
+  return d.getFullYear() + "-" + pad(d.getMonth()+1);
+}
+function pickedType(){
+  var b = typeBtns.filter(function(x){ return x.getAttribute("aria-pressed") === "true"; })[0];
+  return b ? b.dataset.type : "PKW";
+}
+function setType(t){
+  typeBtns.forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.type === t)); });
+}
+
+// Liest das Intervall aus Auswahlfeld plus Zahlenfeld; 0 heißt "noch unvollständig"
+function readMonths(){
+  if(elInt.value === "custom"){
+    var n = parseInt(elIntC.value, 10);
+    return (n >= 1 && n <= 120) ? n : 0;
+  }
+  return parseInt(elInt.value, 10);
+}
+function readCycle(){
+  if(elNext.value === "same") return readMonths();
+  if(elNext.value === "custom"){
+    var n = parseInt(elNextC.value, 10);
+    return (n >= 1 && n <= 120) ? n : 0;
+  }
+  return parseInt(elNext.value, 10);
+}
+// Setzt Auswahlfeld und Zahlenfeld passend zu einem Monatswert
+function applyMonths(sel, custom, wrap, months){
+  if(PRESETS.indexOf(String(months)) >= 0){
+    sel.value = String(months); custom.value = ""; wrap.style.display = "none";
+  } else {
+    sel.value = "custom"; custom.value = months; wrap.style.display = "flex";
+  }
+}
+function syncCustomFields(){
+  document.getElementById("wrap-int-custom").style.display  = elInt.value  === "custom" ? "flex" : "none";
+  document.getElementById("wrap-next-custom").style.display = elNext.value === "custom" ? "flex" : "none";
+}
+
+typeBtns.forEach(function(b){
+  b.addEventListener("click", function(){
+    setType(b.dataset.type);
+    if(!editing){ elInt.value = b.dataset.months; elIntC.value = ""; }
+    syncCustomFields(); updatePreview();
+  });
+});
+[elInt, elNext].forEach(function(el){
+  el.addEventListener("change", function(){ syncCustomFields(); updatePreview(); });
+});
+[elIntC, elNextC].forEach(function(el){
+  el.addEventListener("input", updatePreview);
+});
+elLast.addEventListener("change", updatePreview);
+
+function updatePreview(){
+  var el = document.getElementById("preview-hint");
+  var m = readMonths(), cyc = readCycle();
+  if(!elLast.value){
+    el.textContent = "Trag den Monat der letzten Hauptuntersuchung ein.";
+    return;
+  }
+  if(!m){ el.textContent = "Gib ein Intervall zwischen 1 und 120 Monaten an."; return; }
+  if(!cyc){ el.textContent = "Gib einen Folgerhythmus zwischen 1 und 120 Monaten an."; return; }
+  var d = dueOf({ last: elLast.value, months: m });
+  el.textContent = "Nächste HU: " + MONTHS[d.m] + " " + d.y
+                 + ". Danach automatisch alle " + cyc + " Monate.";
+}
+
+function openSheet(v){
+  editing = v || null;
+  document.getElementById("sheet-title").textContent = v ? "Fahrzeug bearbeiten" : "Fahrzeug aufnehmen";
+  document.getElementById("btn-del").style.display  = v ? "block" : "none";
+  document.getElementById("btn-done").style.display = v ? "block" : "none";
+  elPlate.value = v ? v.plate : "";
+  elLast.value  = v ? v.last  : thisMonth();
+
+  applyMonths(elInt, elIntC, document.getElementById("wrap-int-custom"), v ? v.months : 24);
+  if(v && cycleOf(v) !== v.months){
+    applyMonths(elNext, elNextC, document.getElementById("wrap-next-custom"), cycleOf(v));
+  } else {
+    elNext.value = "same"; elNextC.value = "";
+    document.getElementById("wrap-next-custom").style.display = "none";
+  }
+
+  setType(v ? v.type : "PKW");
+  syncCustomFields(); updatePreview();
+  backdrop.classList.add("open");
+  if(!v) setTimeout(function(){ elPlate.focus(); }, 60);
+}
+function closeSheet(){ backdrop.classList.remove("open"); editing = null; }
+
+document.getElementById("fab").addEventListener("click", function(){ openSheet(null); });
+document.getElementById("btn-cancel").addEventListener("click", closeSheet);
+backdrop.addEventListener("click", function(e){ if(e.target === backdrop) closeSheet(); });
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape" && backdrop.classList.contains("open")) closeSheet();
+});
+
+document.getElementById("btn-save").addEventListener("click", function(){
+  var plate = elPlate.value.trim().toUpperCase();
+  if(!plate){ elPlate.focus(); toast("Das Kennzeichen fehlt noch."); return; }
+  if(!elLast.value){ elLast.focus(); toast("Der Monat der letzten HU fehlt noch."); return; }
+  var m = readMonths();
+  if(!m){ elIntC.focus(); toast("Das Intervall muss zwischen 1 und 120 Monaten liegen."); return; }
+  var cyc = readCycle();
+  if(!cyc){ elNextC.focus(); toast("Der Folgerhythmus muss zwischen 1 und 120 Monaten liegen."); return; }
+
+  var data = { plate: plate, type: pickedType(), last: elLast.value, months: m, next: cyc };
+  var wasEdit = !!editing;
+  if(editing){
+    var changed = editing.last !== data.last || editing.months !== data.months
+               || cycleOf(editing) !== data.next || editing.plate !== data.plate;
+    Object.keys(data).forEach(function(k){ editing[k] = data[k]; });
+    if(changed) editing.seq = (editing.seq || 0) + 1;
+  } else {
+    data.id = "v" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+    data.seq = 0;
+    vehicles.push(data);
+  }
+  save(); render(); closeSheet();
+  toast(wasEdit ? "Änderung gespeichert." : plate + " aufgenommen.");
+});
+
+document.getElementById("btn-done").addEventListener("click", function(){
+  elLast.value = thisMonth();
+  updatePreview();
+  toast("Datum auf diesen Monat gesetzt. Noch speichern.");
+});
+
+document.getElementById("btn-del").addEventListener("click", function(){
+  if(!editing) return;
+  if(!confirm(editing.plate + " aus dem Bestand entfernen?")) return;
+  vehicles = vehicles.filter(function(v){ return v.id !== editing.id; });
+  save(); render(); closeSheet();
+  toast("Fahrzeug entfernt.");
+});
+
+document.getElementById("list").addEventListener("click", function(e){
+  var card = e.target.closest(".card");
+  if(!card) return;
+  var v = vehicles.filter(function(x){ return x.id === card.dataset.id; })[0];
+  if(v) openSheet(v);
+});
+document.getElementById("list").addEventListener("keydown", function(e){
+  if(e.key !== "Enter" && e.key !== " ") return;
+  var card = e.target.closest(".card");
+  if(!card) return;
+  e.preventDefault();
+  var v = vehicles.filter(function(x){ return x.id === card.dataset.id; })[0];
+  if(v) openSheet(v);
+});
+
+/* ============ Sicherung ============ */
+document.getElementById("btn-backup").addEventListener("click", function(){
+  if(!vehicles.length){ toast("Es gibt noch nichts zu sichern."); return; }
+  deliver(new Blob([JSON.stringify(vehicles,null,2)], { type:"application/json" }),
+          "fuhrpark-" + new Date().toISOString().slice(0,10) + ".json", "Sicherung erstellt.");
+});
+document.getElementById("btn-restore").addEventListener("click", function(){
+  document.getElementById("file-in").click();
+});
+document.getElementById("file-in").addEventListener("change", function(e){
+  var f = e.target.files[0];
+  if(!f) return;
+  var r = new FileReader();
+  r.onload = function(){
+    try{
+      var data = JSON.parse(r.result);
+      if(!Array.isArray(data) || !data.every(function(v){ return v.plate && v.last && v.months; })) throw 0;
+      if(vehicles.length && !confirm("Der aktuelle Bestand wird durch " + data.length + " Fahrzeuge ersetzt. Fortfahren?")) return;
+      vehicles = data;
+      save(); render();
+      toast(data.length + " Fahrzeuge eingelesen.");
+    }catch(err){
+      toast("Die Datei passt nicht — erwartet wird eine Sicherung dieser App.");
+    }
+  };
+  r.readAsText(f);
+  e.target.value = "";
+});
+
+render();
+})();
+</script>
+</body>
+</html>
