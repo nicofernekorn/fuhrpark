@@ -54,6 +54,14 @@ h1{font-size:15px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
 .meta .due-txt.overdue{color:var(--alarm)}
 .meta .due-txt.soon{color:var(--warn)}
 .sep{opacity:.4}
+.cal-btn{
+  flex:0 0 auto;width:38px;height:38px;border-radius:9px;cursor:pointer;
+  border:1px solid var(--line);background:var(--surface);color:var(--muted);
+  display:flex;align-items:center;justify-content:center;padding:0;
+}
+.cal-btn:hover{border-color:#b9c0c7;color:var(--ink-2)}
+.cal-btn:active{transform:scale(.94)}
+.cal-btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 
 /* Fortschrittsring: wie viel des Prüfintervalls abgelaufen ist */
 .gauge{position:relative;width:48px;height:48px;flex:0 0 48px}
@@ -153,7 +161,7 @@ input:focus,select:focus{outline:2px solid var(--ink);outline-offset:-1px;border
   <p class="section-label">Kalender</p>
   <div class="tools">
     <button class="tool" id="btn-ics">
-      <span><b>Termine in den Kalender legen</b><small>Wiederholt sich von allein — erinnert 60 und 14 Tage vorher sowie am Stichtag</small></span>
+      <span><b>Alle Termine als Datei</b><small>Für Mac, Outlook oder Google — auf dem iPhone stattdessen die Knöpfe an den Fahrzeugen nutzen</small></span>
       <span class="chev">→</span>
     </button>
   </div>
@@ -340,7 +348,14 @@ function render(){
              + gaugeHTML(v) + '<div class="card-main">' + plateHTML(v.plate)
              + '<div class="meta"><span class="due-txt ' + st + '">' + esc(dueLabel(v)) + '</span>'
              + '<span class="sep">·</span><span>' + esc(v.type) + '</span>'
-             + '<span class="sep">·</span><span>alle ' + cycleOf(v) + ' Mon.</span></div></div></div>';
+             + '<span class="sep">·</span><span>alle ' + cycleOf(v) + ' Mon.</span></div></div>'
+             + '<button class="cal-btn" data-cal="' + v.id + '" title="Diesen Termin in den Kalender"'
+             + ' aria-label="Termin für ' + esc(v.plate) + ' in den Kalender">'
+             + '<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">'
+             + '<rect x="3" y="5" width="18" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/>'
+             + '<path d="M3 10h18M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'
+             + '<path d="M12 13v5M9.5 15.5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'
+             + '</svg></button></div>';
       }).join("")
     : '<div class="empty"><p>Noch kein Fahrzeug erfasst.</p><span>Nimm das erste auf, dann siehst du hier, was als Nächstes zur HU muss.</span></div>';
 
@@ -379,24 +394,29 @@ function fold(line){
   return parts.join("\r\n ");
 }
 
-function buildICS(){
+function buildICS(subset){
+  var items = subset || vehicles;
   var stamp = new Date().toISOString().replace(/[-:]/g,"").split(".")[0] + "Z";
+  // Kein METHOD: sonst deutet iOS die Datei als einzelne Einladung statt als Kalender
   var L = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Fuhrpark//HU//DE","CALSCALE:GREGORIAN",
-           "METHOD:PUBLISH","X-WR-CALNAME:HU-Termine"];
+           "X-WR-CALNAME:HU-Termine"];
 
-  function vevent(uid, y, m, v, rruleMonths, seq){
-    var e = new Date(y, m, 2);
+  items.forEach(function(v){
+    var d = dueOf(v), cyc = cycleOf(v), seq = v.seq || 0;
+    var e = new Date(d.y, d.m, 2);
     var title = "HU fällig: " + v.plate;
+    // Ein einziger Termin je Fahrzeug: Beginn = nächste Fälligkeit, Wiederholung = Folgerhythmus.
+    // Eine abweichende erste Frist steckt bereits im Fälligkeitsdatum.
     L.push("BEGIN:VEVENT");
-    L.push("UID:" + uid + "@fuhrpark.local");
+    L.push("UID:" + v.id + "@fuhrpark.local");
     L.push("DTSTAMP:" + stamp);
-    L.push("SEQUENCE:" + (seq || 0));
-    L.push("DTSTART;VALUE=DATE:" + y + pad(m+1) + "01");
+    L.push("SEQUENCE:" + seq);
+    L.push("DTSTART;VALUE=DATE:" + d.y + pad(d.m+1) + "01");
     L.push("DTEND;VALUE=DATE:" + e.getFullYear() + pad(e.getMonth()+1) + pad(e.getDate()));
-    if(rruleMonths) L.push("RRULE:FREQ=MONTHLY;INTERVAL=" + rruleMonths);
+    L.push("RRULE:FREQ=MONTHLY;INTERVAL=" + cyc);
     L.push(fold("SUMMARY:" + icsEsc(title)));
     L.push(fold("DESCRIPTION:" + icsEsc(
-      v.type + " " + v.plate + ". Prüfrhythmus: alle " + (rruleMonths || v.months) + " Monate. "
+      v.type + " " + v.plate + ". Prüfrhythmus: alle " + cyc + " Monate. "
       + "Nach der HU das Datum in der Fuhrpark-App weiterstellen."
     )));
     L.push("TRANSP:TRANSPARENT");
@@ -406,22 +426,15 @@ function buildICS(){
       L.push("END:VALARM");
     });
     L.push("END:VEVENT");
-  }
-
-  vehicles.forEach(function(v){
-    var d = dueOf(v), cyc = cycleOf(v), seq = v.seq || 0;
-    if(cyc === v.months){
-      vevent(v.id, d.y, d.m, v, cyc, seq);
-    } else {
-      // Abweichende erste Frist: einzelner Termin, danach die Reihe im Folgerhythmus
-      vevent(v.id + "-a", d.y, d.m, v, null, seq);
-      var t2 = d.y*12 + d.m + cyc;
-      vevent(v.id + "-b", Math.floor(t2/12), t2%12, v, cyc, seq);
-    }
   });
 
   L.push("END:VCALENDAR");
   return L.join("\r\n") + "\r\n";
+}
+
+// Dateiname aus dem Kennzeichen, damit die Anhänge unterscheidbar bleiben
+function slug(s){
+  return s.replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"").toLowerCase() || "fahrzeug";
 }
 
 function deliver(blob, filename, msg){
@@ -597,6 +610,17 @@ document.getElementById("btn-del").addEventListener("click", function(){
 });
 
 document.getElementById("list").addEventListener("click", function(e){
+  var cal = e.target.closest(".cal-btn");
+  if(cal){
+    e.stopPropagation();
+    var cv = vehicles.filter(function(x){ return x.id === cal.dataset.cal; })[0];
+    if(cv){
+      deliver(new Blob([buildICS([cv])], { type:"text/calendar" }),
+              "hu-" + slug(cv.plate) + ".ics",
+              cv.plate + ": Datei antippen und hinzufügen.");
+    }
+    return;
+  }
   var card = e.target.closest(".card");
   if(!card) return;
   var v = vehicles.filter(function(x){ return x.id === card.dataset.id; })[0];
